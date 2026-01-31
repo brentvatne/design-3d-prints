@@ -75,7 +75,7 @@ Options: ["Rounded (8mm) - comfortable grip", "Subtle (3-5mm)", "Sharp - industr
 **Round 5 - Printer:**
 ```
 Question: "What printer will you use?"
-Options: ["Bambu P1S/P2S/A1 (256mm)", "Prusa MK4 (250×210mm)", "Ender 3 (220mm)", "Other"]
+Options: ["Bambu P2S (256mm) (Recommended)", "Bambu P1S/A1 (256mm)", "Prusa MK4 (250×210mm)", "Ender 3 (220mm)", "Other"]
 ```
 
 ### For Boxes/Enclosures
