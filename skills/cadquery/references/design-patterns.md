@@ -718,3 +718,111 @@ def export_all(parts, base_name="part"):
         exporters.export(part, filename)
         print(f"Exported {filename}")
 ```
+
+## 8. Adjustable Fit Patterns
+
+When tolerances are tight, design for adjustment instead of relying on perfect dimensions.
+
+### Slotted Holes
+
+```python
+def adjustable_mount(hole_d, adjust_range=5, thickness=4):
+    """Slot instead of round hole allows position adjustment."""
+    return (
+        cq.Workplane("XY")
+        .slot2D(hole_d + adjust_range, hole_d)
+        .extrude(thickness)
+    )
+```
+
+### Wedge Clamp
+
+```python
+def wedge_clamp(width, height, angle=5):
+    """
+    Wedge that slides to tighten.
+    Self-locking due to friction angle (<15° for most materials).
+    """
+    import math
+    wedge_length = height / math.tan(math.radians(angle))
+
+    return (
+        cq.Workplane("XZ")
+        .lineTo(wedge_length, 0)
+        .lineTo(0, height)
+        .close()
+        .extrude(width)
+    )
+```
+
+### Eccentric Cam
+
+```python
+def eccentric_cam(outer_d=20, offset=2, thick=5):
+    """
+    Eccentric cam for fine position adjustment.
+    Rotate to adjust by 2x offset distance.
+    """
+    return (
+        cq.Workplane("XY")
+        .circle(outer_d / 2)
+        .extrude(thick)
+        .faces(">Z")
+        .workplane()
+        .center(offset, 0)  # Off-center hole
+        .circle(3)  # Adjustment tool socket
+        .cutBlind(-thick + 1)
+    )
+```
+
+## 9. Keyed Alignment
+
+```python
+def keyed_alignment(key_w=5, key_h=3, key_d=10):
+    """
+    Asymmetric key prevents wrong-orientation assembly.
+    Use when parts look similar but aren't interchangeable.
+    """
+    # Asymmetric profile
+    return (
+        cq.Workplane("XY")
+        .moveTo(-key_w/2, 0)
+        .lineTo(key_w/2, 0)
+        .lineTo(key_w/3, key_h)  # Asymmetric!
+        .lineTo(-key_w/2, key_h)
+        .close()
+        .extrude(key_d)
+    )
+```
+
+## 10. Label Recess
+
+```python
+def add_label_recess(part, label_w, label_h, depth=0.6, corner_r=2):
+    """Add recessed area for label/sticker on top face."""
+    return (
+        part.faces(">Z").workplane()
+        .rect(label_w, label_h)
+        .cutBlind(-depth)
+        .edges(">Z").fillet(corner_r)
+    )
+```
+
+## 11. Magnet Pockets
+
+```python
+def add_magnet_pockets(part, magnet_d=6, magnet_h=3, positions=None):
+    """
+    Add pockets for press-fit magnets.
+    Use interference fit: pocket = magnet_d - 0.2mm
+    """
+    pocket_d = magnet_d - 0.2
+    for x, y in positions:
+        part = (
+            part.faces("<Z").workplane()
+            .center(x, y)
+            .circle(pocket_d / 2)
+            .cutBlind(-magnet_h)
+        )
+    return part
+```

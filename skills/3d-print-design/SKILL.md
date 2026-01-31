@@ -12,11 +12,13 @@ Gather requirements and create formal specifications for 3D printable objects be
 ## Design Process Overview
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  1. REQUIREMENTS    →   2. SPECIFICATION   →   3. IMPLEMENT │
-│  (this skill)           (this skill)           (cadquery)   │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  1. REQUIREMENTS  →  2. SPECIFICATION  →  3. TEST PLAN  →  4. IMPLEMENT      │
+│  (this skill)        (this skill)         (this skill)     (cadquery)        │
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
+
+**Do not skip phases.** Each phase must be completed and approved before proceeding.
 
 ## Phase 1: Requirements Gathering (MANDATORY)
 
@@ -37,7 +39,62 @@ Question: "Should the device be tilted?"
 Options: ["Flat (0°)", "Slight tilt (5-10°)", "Ergonomic tilt (12-15°)", "Steep (20°+)"]
 ```
 
-**Round 2 - Support Configuration:**
+**Round 2 - Stand Architecture:**
+```
+Question: "What type of stand structure?"
+Options: [
+  "Tray/Enclosure - box with hollow interior, device sits on top (Recommended for storage underneath)",
+  "Open Frame - legs or rails with device resting on shelves (lighter, device visible)",
+  "Platform - solid base slab with lip around edges (simple, heavy)"
+]
+→ If "Open Frame", proceed to leg style question below
+→ If "Tray/Enclosure", skip to Round 3
+→ If "Platform", skip to Round 4
+```
+
+**Round 2b - Leg Style (Open Frame only):**
+
+Visualize options with ASCII diagrams:
+
+```
+SIDE RAILS / SLED BASE              CORNER POSTS
+─────────────────────────           ─────────────────────────
+    ┌─────────────┐                     ┌─────────────┐
+    │   device    │                     │   device    │
+────┴─────────────┴────             ────┴──┐     ┌──┴────
+│▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓│                 │▓▓│     │▓▓│
+│▓▓▓   LEFT RAIL   ▓▓▓│                 │▓▓│     │▓▓│
+════════════════════════             ════════════════════════
+(continuous runners                  (4 discrete posts,
+along each side)                     minimal material)
+
+
+A-FRAME / EASEL                     PERIMETER FRAME
+─────────────────────────           ─────────────────────────
+        ╱─────────╲                     ┌─────────────┐
+       ╱│ device  │╲                    │   device    │
+      ╱ └─────────┘ ╲               ────┴─────────────┴────
+     ╱▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓╲              │▓▓│             │▓▓│
+    ╱▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓╲             │▓▓└─────────────┘▓▓│
+════════════════════════             ════════════════════════
+(triangular profile,                 (thin rectangular frame,
+good for displays)                   modern floating look)
+```
+
+```
+Question: "What leg/base style for the open frame?"
+Options: [
+  "Side Rails - two continuous runners, device spans between (Recommended for two-piece printing)",
+  "Corner Posts - four discrete legs at corners (minimal, device visible from all sides)",
+  "A-Frame - triangular easel style (good for displays, tablets)",
+  "Perimeter Frame - rectangular base frame with corner posts (modern, floating look)"
+]
+
+→ If "Side Rails", follow up: "Should rails include crossbars for extra rigidity?"
+→ If "Corner Posts", follow up: "Post style: straight, tapered, or splayed outward?"
+```
+
+**Round 3 - Support Configuration:**
 ```
 Question: "How should the device be held in place?"
 Options: [
@@ -98,6 +155,50 @@ Options: ["Bambu P2S (256mm) (Recommended)", "Bambu P1S/A1 (256mm)", "Prusa MK4 
 **Round 2:** Entry/exit configuration?
 **Round 3:** Mounting method? (adhesive, screw, clip-on)
 
+### When Users Ask for Clarification
+
+If a user asks to clarify options or doesn't understand a choice, **visualize with ASCII side-view diagrams**. This is especially helpful for:
+
+- Tilt angle options
+- Slope compensation choices
+- Shelf vs lip configurations
+- Interior hollow space options
+
+**Example - Visualizing tilt/slope options:**
+
+```
+OPTION 1: Add tilt on top (stand tilt + device slope)
+─────────────────────────────────────────────────────
+                                      ___
+                                  ___/   |  ← device
+                              ___/▓▓▓▓▓▓▓|
+                          ___/▓▓▓▓▓▓▓▓▓▓▓|
+                        |▓▓▓▓▓▓ STAND ▓▓▓|
+════════════════════════════════════════════  ← desk
+
+
+OPTION 2: Compensate to level
+─────────────────────────────
+                 _____________________
+                |   device (level)    |
+                |▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓|
+                 \▓▓▓▓▓ STAND ▓▓▓▓▓▓▓/
+════════════════════════════════════════════  ← desk
+```
+
+**Example - Visualizing shelf vs lip:**
+
+```
+SHELF (supports from below)     LIP (retains from side)
+─────────────────────────────   ─────────────────────────
+    ┌─────────┐                     ┌─────────┐
+    │ device  │                     │ device  │▌← lip
+    └────┬────┘                     └─────────┘
+    ▓▓▓▓▓▓▓▓▓▓▓ ← shelf             ▓▓▓▓▓▓▓▓▓▓▓
+```
+
+Include a summary table after the diagrams showing key differences between options.
+
 ## Phase 2: Formal Specification (MANDATORY)
 
 After gathering requirements, present a formal spec for user approval. **DO NOT proceed to implementation until the spec is approved.**
@@ -113,6 +214,7 @@ After gathering requirements, present a formal spec for user approval. **DO NOT 
 |-------|-------|
 | Object | [Name] |
 | Type | Stand / Box / Bracket / Mount / Other |
+| Architecture | Tray/Enclosure / Open Frame / Platform |
 | File | `[filename].py` |
 
 ## Device/Contents
@@ -135,6 +237,15 @@ After gathering requirements, present a formal spec for user approval. **DO NOT 
 | Back height | ___ mm | front_height + depth × tan(tilt) |
 | Stand width | ___ mm | device_width + clearance×2 + wall×2 |
 | Stand depth | ___ mm | device_depth + clearance×2 + wall×2 |
+
+## Open Frame Structure (if Architecture = Open Frame)
+
+| Parameter | Value |
+|-----------|-------|
+| Leg style | Side Rails / Corner Posts / A-Frame / Perimeter Frame |
+| Leg/rail thickness | ___ mm |
+| Crossbars | Y/N (if side rails) |
+| Post shape | Straight / Tapered / Splayed (if corner posts) |
 
 ## Side Configuration
 
@@ -242,13 +353,70 @@ Before implementation, verify the spec is complete:
 | Inside corners | Fillet | 2-3 mm | Stress relief |
 | Outside corners | Fillet | 3-8 mm | Grip comfort, aesthetics |
 
+## Phase 4: Test Plan (MANDATORY)
+
+Before implementation, create a test plan that will validate the final model. Include this in the spec file.
+
+### Test Plan Template
+
+```markdown
+## Test Plan
+
+### Geometry Validation (run in code)
+1. Overall dimensions match spec (width, depth, height ±0.1mm)
+2. Device pocket dimensions correct
+3. All specified features present (shelves, lips, holes, etc.)
+4. Model is watertight (valid solid)
+
+### Fit Tests (visual/measurement)
+1. Device fits in pocket with specified clearance
+2. Ghost object shows correct placement
+3. No interference between device and stand geometry
+
+### Printability Tests (in slicer)
+1. Each part fits on print bed
+2. No unsupported overhangs > 45°
+3. No bridging spans > 50mm
+4. Layer orientation appropriate for load direction
+
+### Assembly Tests (if multi-part)
+1. Parts align correctly when joined
+2. Snap-fits / tabs engage properly
+3. Seam is flush (no step or gap)
+
+### Functional Tests (post-print)
+1. Device sits at correct angle
+2. Device doesn't slide or tip
+3. Cables can route as designed
+4. Stand is stable on desk (doesn't rock)
+```
+
+### Test Categories by Stand Type
+
+**Tray/Enclosure stands:**
+- Interior hollow space dimensions
+- Contents fit inside without interference
+- Shelf supports device at correct height
+- Cable holes accessible
+
+**Open Frame stands:**
+- Rails/legs provide stable support
+- No flex under device weight
+- Open areas don't compromise rigidity
+- Joints between parts are strong
+
+**Multi-piece designs:**
+- Each piece prints flat without supports
+- Assembly method works (snap-fit, bolts, etc.)
+- Assembled stand is rigid (no wobble at seams)
+
 ## Handoff to Implementation
 
-Once spec is approved, hand off to implementation:
+Once spec AND test plan are approved, hand off to implementation:
 
 ```
-✅ Spec approved → Use `cadquery` skill (PREFERRED)
-                   or `openscad` skill (if explicitly requested)
+✅ Spec approved + Test plan defined → Use `cadquery` skill (PREFERRED)
+                                        or `openscad` skill (if explicitly requested)
 ```
 
-The implementation skill will receive the spec and generate code.
+The implementation skill will receive the spec and generate code with validation functions that check the test plan items.
