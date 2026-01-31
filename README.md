@@ -26,20 +26,20 @@ Claude Code skills for designing and implementing 3D printable objects. Mostly a
 
 ```
 design-3d-prints/
-├── skills/
-│   ├── 3d-print-design/     # Requirements & specification
-│   │   └── SKILL.md
-│   ├── cadquery/            # CadQuery implementation
-│   │   ├── SKILL.md
-│   │   ├── examples/
-│   │   └── references/
-│   └── openscad/            # OpenSCAD implementation (deprecated)
-│       ├── SKILL.md
-│       ├── examples/
-│       ├── references/
-│       └── scripts/
-└── shared/
-    └── manufacturing.md     # Shared constraints & hardware data
+└── skills/
+    ├── 3d-print-design/     # Requirements & specification
+    │   └── SKILL.md
+    ├── cadquery/            # CadQuery implementation
+    │   ├── SKILL.md
+    │   ├── examples/
+    │   └── references/
+    ├── openscad/            # OpenSCAD implementation (deprecated)
+    │   ├── SKILL.md
+    │   ├── examples/
+    │   ├── references/
+    │   └── scripts/
+    └── shared/              # Shared constraints & hardware data
+        └── manufacturing.md
 ```
 
 ## Installation
@@ -50,6 +50,7 @@ Symlink skills to Claude's skills directory:
 ln -s ~/code/design-3d-prints/skills/3d-print-design ~/.claude/skills/
 ln -s ~/code/design-3d-prints/skills/cadquery ~/.claude/skills/
 ln -s ~/code/design-3d-prints/skills/openscad ~/.claude/skills/
+ln -s ~/code/design-3d-prints/skills/shared ~/.claude/skills/
 ```
 
 ## Why CadQuery over OpenSCAD?
