@@ -71,7 +71,8 @@ Shared manufacturing constraints for 3D printing design, applicable to all CAD t
 
 | Printer | Bed X | Bed Y | Bed Z |
 |---------|-------|-------|-------|
-| Bambu P1S/P2S | 256 | 256 | 256 |
+| Bambu P1S | 256 | 256 | 256 |
+| Bambu P2S | 256 | 256 | 256 |
 | Bambu A1 | 256 | 256 | 256 |
 | Bambu A1 Mini | 180 | 180 | 180 |
 | Prusa MK4 | 250 | 210 | 220 |
