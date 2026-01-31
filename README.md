@@ -1,6 +1,6 @@
 # 3D Print Design Skills
 
-Claude Code skills for designing and implementing 3D printable objects.
+Claude Code skills for designing and implementing 3D printable objects. Mostly automatically generated and refined by Claude. YMMV, I'm using it to generate stands for electronic music equipment.
 
 ## Skills
 
