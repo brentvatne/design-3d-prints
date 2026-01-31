@@ -20,46 +20,83 @@ Gather requirements and create formal specifications for 3D printable objects be
 
 ## Phase 1: Requirements Gathering (MANDATORY)
 
-**Before ANY design work**, gather complete requirements through structured questions. Ask too many questions rather than making assumptions.
+**Before ANY design work**, use the AskUserQuestion tool to gather requirements. Ask too many questions rather than making assumptions.
+
+### How to Prompt
+
+Use AskUserQuestion with 2-4 focused questions per round. Group related questions together. Continue until all requirements are gathered.
 
 ### For Stands/Holders/Cradles
 
-Ask ALL of these (user can answer "research it" for any):
+**Round 1 - Device & Orientation:**
+```
+Question: "What device is this stand for?"
+Options: [User describes device] → Follow up to get exact W × D × H dimensions
 
-1. **Device dimensions**: What are the exact W × D × H measurements?
-2. **Tilt angle**: Should the device be tilted? At what angle? (0° = flat)
-3. **For EACH side (front, back, left, right)**:
-   - Does it need a **shelf** (horizontal surface supporting weight from below)?
-   - Does it need a **lip** (vertical wall preventing sliding)?
-   - If shelf: how wide should it extend under the device? (default: 10mm)
-   - If lip: how tall should the retaining wall be? (default: 10mm)
-4. **Hollow interior**: Is there internal storage? What goes inside? (dimensions)
-5. **Cutouts/holes**: Any cable holes, ventilation, access ports? Where and what size?
-6. **Wall thickness**: Structural (5mm) or lighter (3mm)?
-7. **Corner radius**: Sharp (0mm), subtle (3-5mm), or rounded (8-10mm)?
-8. **Printer**: What printer/bed size? (for fit checking)
+Question: "Should the device be tilted?"
+Options: ["Flat (0°)", "Slight tilt (5-10°)", "Ergonomic tilt (12-15°)", "Steep (20°+)"]
+```
+
+**Round 2 - Support Configuration:**
+```
+Question: "How should the device be held in place?"
+Options: [
+  "Shelf on all sides with front lip (most secure)",
+  "Shelf on sides, open back for cables",
+  "Minimal - just corners",
+  "Let me specify each side"
+]
+→ If "specify each side", ask about front/back/left/right individually
+```
+
+**Round 3 - Interior & Features:**
+```
+Question: "Does the stand need hollow interior storage?"
+Options: ["No - solid base", "Yes - for batteries/cables", "Yes - for specific items"]
+→ If yes, ask what goes inside with dimensions
+
+Question: "What openings are needed?"
+Options: ["Cable hole in back", "Ventilation slots", "USB/power access", "None", "Multiple"]
+```
+
+**Round 4 - Construction:**
+```
+Question: "How sturdy should this be?"
+Options: [
+  "Light duty (3mm walls) - decorative, light devices",
+  "Standard (5mm walls) - most devices (Recommended)",
+  "Heavy duty (8mm walls) - heavy equipment"
+]
+
+Question: "Corner style?"
+Options: ["Rounded (8mm) - comfortable grip", "Subtle (3-5mm)", "Sharp - industrial look"]
+```
+
+**Round 5 - Printer:**
+```
+Question: "What printer will you use?"
+Options: ["Bambu P1S/A1 (256mm)", "Prusa MK4 (250×210mm)", "Ender 3 (220mm)", "Other"]
+```
 
 ### For Boxes/Enclosures
 
-1. **Interior dimensions**: What needs to fit inside?
-2. **Lid type**: None, removable, hinged, sliding?
-3. **Wall thickness**: Light (2mm), standard (3mm), structural (4mm+)?
-4. **Mounting**: Screws, clips, magnets, friction fit?
-5. **Access**: Which sides need openings?
+**Round 1:** What needs to fit inside? (get dimensions)
+**Round 2:** Lid type? (none, removable, hinged, sliding)
+**Round 3:** Wall thickness and mounting method?
+**Round 4:** Which sides need openings?
 
 ### For Brackets/Mounts
 
-1. **What is being mounted**: Dimensions and weight?
-2. **Mounting surface**: Wall, desk, pole? Screw holes or clamp?
-3. **Load direction**: Hanging, resting, cantilevered?
-4. **Adjustment needed**: Fixed or adjustable angle/position?
+**Round 1:** What's being mounted? (dimensions, weight)
+**Round 2:** Mounting surface? (wall, desk, pole) + attachment method?
+**Round 3:** Load direction? (hanging, resting, cantilevered)
+**Round 4:** Fixed or adjustable?
 
 ### For Cable Management
 
-1. **Cable diameter(s)**: Single or multiple cables?
-2. **Entry/exit**: How do cables enter and exit?
-3. **Mounting**: Adhesive, screw, clip-on?
-4. **Quantity needed**: How many clips/holders?
+**Round 1:** Cable diameter(s) and quantity?
+**Round 2:** Entry/exit configuration?
+**Round 3:** Mounting method? (adhesive, screw, clip-on)
 
 ## Phase 2: Formal Specification (MANDATORY)
 
