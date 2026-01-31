@@ -1,0 +1,35 @@
+{
+  "constraints": {
+    "minWallThickness": 1.2,
+    "minStructuralWall": 2.4,
+    "minBaseThickness": 0.8,
+    "maxOverhangAngle": 45,
+    "maxBridgeSpan": 10,
+    "minHoleCompensation": 0.3,
+    "minFeatureSize": 0.4
+  },
+  "codeQuality": {
+    "requireParameterComments": true,
+    "requireModuleDocstrings": false,
+    "maxModuleComplexity": 50,
+    "requireFnForCurves": true,
+    "minFnValue": 16,
+    "requireEpsilonForBooleans": true
+  },
+  "structure": {
+    "requireParametersAtTop": true,
+    "requireHiddenSection": true,
+    "maxFileLength": 1000
+  },
+  "printer": {
+    "bedSize": [220, 220, 250],
+    "nozzleWidth": 0.4,
+    "layerHeight": 0.2,
+    "printSpeed": 50
+  },
+  "material": {
+    "type": "PLA",
+    "density": 1.24,
+    "costPerKg": 25
+  }
+}
