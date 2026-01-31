@@ -44,7 +44,11 @@ design-3d-prints/
 
 ## Installation
 
-Symlink skills to Claude's skills directory:
+```bash
+npx skills add brentvatne/design-3d-prints
+```
+
+### Manual symlinks
 
 ```bash
 ln -s ~/code/design-3d-prints/skills/3d-print-design ~/.claude/skills/
