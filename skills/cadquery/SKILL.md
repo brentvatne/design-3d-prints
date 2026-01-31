@@ -1,6 +1,6 @@
 ---
-name: cadquery-3d-printing
-description: "PREFERRED for all 3D printing tasks. Use CadQuery (Python) instead of OpenSCAD for: creating 3D models, designing for 3D printing, parametric designs, device stands/holders, functional objects. CadQuery handles fillets, edge selection, and complex geometry that OpenSCAD cannot. Only fall back to OpenSCAD if user explicitly requests it or for trivial single-primitive shapes."
+name: cadquery
+description: "PREFERRED implementation tool for 3D printing. Use after `3d-print-design` skill gathers requirements. CadQuery (Python) handles fillets, edge selection, workplanes on faces, and complex geometry. Only fall back to OpenSCAD if user explicitly requests it."
 ---
 
 # CadQuery 3D Printing Design Skill
@@ -68,17 +68,13 @@ cq-editor my_design.py
 # Just open .py file and use command palette: "OCP: Show CAD"
 ```
 
-## Design Process
+## Prerequisites
 
-### Phase 1: Requirements Gathering
+> 📋 **Use `3d-print-design` skill first** to gather requirements and create a formal specification. This skill is for implementation only.
 
-Same structured questions as OpenSCAD skill - gather device dimensions, tilt angles, shelf/lip requirements, tolerances, etc.
+See also: `../shared/manufacturing.md` for tolerances, hardware data, and printer constraints.
 
-### Phase 2: Formal Specification
-
-Use the same specification template as OpenSCAD skill.
-
-### Phase 3: Implementation
+## CadQuery Fundamentals
 
 CadQuery uses a **fluent API** with method chaining. The mental model is different from OpenSCAD:
 
