@@ -199,6 +199,68 @@ stand = stand.union(platform)
 | Underside edges | Fillet | 2mm | `edges("<Z")` | `NearestToPointSelector(point)` |
 | Interior corners | Fillet | 2-3mm | After boolean cuts | After boolean cuts |
 
+### Step 7: Supports Must Overlap with Platform (Volume Intersection Required)
+
+**⚠️ CRITICAL: Union only works when parts share VOLUME, not just touch at an edge!**
+
+For `part_a.union(part_b)` to properly fuse geometry, the parts must have overlapping volume. Parts that only touch at a single edge or face may fail silently.
+
+**Common failure: Flat-topped supports under tilted platforms**
+
+```python
+# Platform tilts 15° from front to back
+# A-frame has FLAT top - only touches platform at front edge!
+frame = (
+    cq.Workplane("XZ")
+    .moveTo(-w/2, 0).lineTo(w/2, 0)
+    .lineTo(w/2, height)      # Flat top at Z=height
+    .lineTo(-w/2, height)     # Flat top at Z=height
+    .close()
+    .extrude(depth)
+)
+# Frame top at Z=35, but platform bottom TILTS from Z=30 (front) to Z=70 (back)
+# Zero volume overlap except at front edge → union may fail!
+```
+
+**Solution - Tilted top matching platform slope:**
+```python
+# Calculate rise across frame depth
+tilt_rise = frame_depth * math.tan(math.radians(TILT_ANGLE))
+overlap = 5  # mm into platform
+
+frame = (
+    cq.Workplane("YZ")
+    .moveTo(-depth/2, 0)                      # Front-bottom
+    .lineTo(depth/2, 0)                       # Back-bottom
+    .lineTo(depth/2, back_height)             # Back-top (higher, matches tilt)
+    .lineTo(-depth/2, front_height)           # Front-top (lower)
+    .close()
+    .extrude(width / 2, both=True)
+)
+# Frame top now tilts to match platform → full volume overlap!
+```
+
+**Why corner posts work but A-frames failed:**
+- Corner posts: Simple vertical extrusions that extend UP into the platform volume ✓
+- A-frames: Wide but shallow depth - flat top only touched tilted platform at one edge ✗
+
+**The rule:** For tilted platforms, any support with depth (front-to-back extent) must have its top surface tilted at the same angle. Calculate height rise: `depth × tan(tilt_angle)`
+
+**Verify overlap with `verify_fusion()`:**
+```python
+def verify_fusion(part_a, part_b, name="parts"):
+    """Verify parts share volume (overlap > 0)."""
+    vol_a = part_a.val().Volume()
+    vol_b = part_b.val().Volume()
+    result = part_a.union(part_b)
+    vol_union = result.val().Volume()
+    overlap = (vol_a + vol_b) - vol_union
+    if overlap < 1:
+        raise AssertionError(f"{name}: No volume overlap!")
+    print(f"  ✓ {name}: {overlap:.0f}mm³ overlap")
+    return result
+```
+
 > ⚠️ **MANDATORY PROCESS:**
 >
 > **BEFORE writing geometry code:**
@@ -210,9 +272,56 @@ stand = stand.union(platform)
 > 1. **Run the code** immediately to verify it executes without errors
 > 2. **Run validation** using `validate_design()` (see "Mandatory Validation" section)
 > 3. **Verify edge treatments** - Use `verified_chamfer()`/`verified_fillet()` that check volume change
-> 4. **Only export STLs** if all validation checks pass
+> 4. **Auto-render STL previews** using OpenSCAD (see below)
+> 5. **Only export STLs** if all validation checks pass AND renders look correct
 >
 > Never hand off STL files to the user without running validation first.
+
+### Auto-Render STL Previews with OpenSCAD
+
+Use OpenSCAD CLI to render STL files for visual verification:
+
+```bash
+# Create temp script to import STL
+cat > /tmp/render_stl.scad << EOF
+import("/path/to/model.stl");
+EOF
+
+# Render from 3 verification angles
+# 1. Front-right isometric (shows front, right, 3 of 4 legs)
+openscad -o /tmp/preview-front.png --autocenter --camera=0,0,0,55,0,45,400 \
+    --imgsize=800,600 --colorscheme=Tomorrow /tmp/render_stl.scad
+
+# 2. Back-left isometric (shows back, left, opposite legs)
+openscad -o /tmp/preview-back.png --autocenter --camera=0,0,0,55,0,225,400 \
+    --imgsize=800,600 --colorscheme=Tomorrow /tmp/render_stl.scad
+
+# 3. Underneath view (verifies all legs reach ground, connections)
+openscad -o /tmp/preview-under.png --autocenter --camera=0,0,0,105,0,180,450 \
+    --imgsize=800,600 --colorscheme=Tomorrow /tmp/render_stl.scad
+```
+
+**Camera parameters:** `--camera=translateX,Y,Z,rotX,Y,Z,distance`
+- Use `--autocenter` to center on model automatically
+- Rotation 55° pitch gives good isometric view
+- Rotation 45° vs 225° azimuth shows opposite corners
+
+**What each angle verifies:**
+| Angle | Purpose |
+|-------|---------|
+| Front-right (45°) | Front lip, right lip, front legs, overall shape |
+| Back-left (225°) | Back opening, left lip, back legs, symmetry |
+| Underneath (105°) | All legs present, ground contact, connections |
+
+**Visual verification checklist (check renders before delivering STL):**
+- [ ] All support structures present (count legs/rails/frames)
+- [ ] Lips visible on correct sides (front, left, right - NOT back if open)
+- [ ] Platform tilts in correct direction (higher at back)
+- [ ] No floating geometry (all parts connected)
+- [ ] No missing chunks or holes in solid surfaces
+- [ ] Fillets/chamfers visible on edges (smooth corners, not sharp)
+
+**Use Read tool to view rendered PNGs** and verify visually before delivering to user.
 
 ## When to Use This Skill
 
@@ -1202,6 +1311,333 @@ pocket_cut_depth = stand_depth  # NOT pocket_d
 - No seams between lips and main body
 - Pocket extending to full depth eliminates corner ledges
 - Back opening being narrower preserves continuous side lip geometry
+
+### Stand Leg Style Options
+
+When building tilted device stands, choose a leg style based on aesthetics, stability, and printability:
+
+| Style | Description | Stability | Material | Print Difficulty |
+|-------|-------------|-----------|----------|------------------|
+| **Corner Posts** | 4 discrete square columns | Good | Minimal | Easy |
+| **Side Rails** | 2 continuous runners (left/right) | Excellent | Medium | Easy |
+| **A-Frame** | Trapezoidal frames (front/back) | Very Good | Medium | Moderate* |
+| **Perimeter Frame** | Rectangular base + corner posts | Excellent | Medium | Easy |
+| **Cantilever** | Single back wall, floating shelf | Very Good | High | Easy |
+| **Slab Ends** | Solid side panels (left/right) | Excellent | High | Easy |
+| **Splayed Legs** | 4 angled legs spreading outward | Excellent | Low | Moderate |
+| **Pedestal** | Single central column + wide base | Moderate | Medium | Easy |
+| **Arc/Bow Legs** | Curved legs bowing outward | Good | Low | Moderate |
+| **X-Frame** | Crossing diagonal supports | Excellent | Medium | Easy |
+| **Lattice** | Triangulated truss structure | Good | Minimal | Complex |
+
+*A-Frame requires tilted tops matching platform slope (see Step 7: Supports Must Overlap)
+
+**Implementation patterns by leg style:**
+
+```python
+# Side Rails / Slab Ends - YZ profile extruded in X (reliable platform overlap)
+def make_rail(x_pos):
+    rail = (
+        cq.Workplane("YZ")
+        .moveTo(-DEPTH/2, 0)
+        .lineTo(DEPTH/2, 0)
+        .lineTo(DEPTH/2, BACK_H)
+        .lineTo(-DEPTH/2, FRONT_H)
+        .close()
+        .extrude(thickness)
+        .translate((x_pos, 0, 0))
+    )
+    return rail
+
+# Corner Posts / Splayed Legs - simple vertical extrusions
+def make_post(x, y, height):
+    return cq.Workplane("XY").center(x, y).circle(r).extrude(height)
+
+# A-Frame / X-Frame - tilted profile in YZ plane
+# CRITICAL: top must be tilted to match platform slope!
+tilt_rise = depth * math.tan(math.radians(TILT_ANGLE))
+frame = (
+    cq.Workplane("YZ")
+    .moveTo(-depth/2, 0)
+    .lineTo(depth/2, 0)
+    .lineTo(depth/2, back_height)    # Higher at back
+    .lineTo(-depth/2, front_height)  # Lower at front
+    .close()
+    .extrude(width)
+)
+```
+
+**Choosing a leg style:**
+- **Minimal material**: Corner Posts, Arc Legs, Lattice
+- **Maximum stability**: Side Rails, Slab Ends, Perimeter Frame
+- **Visual interest**: X-Frame, Arc Legs, Splayed Legs
+- **Easy printing**: Corner Posts, Side Rails, Pedestal
+- **Portable/foldable**: Consider adding hinges to A-Frame or Slab Ends
+
+### Adjustable/Foldable Leg Mechanisms
+
+For stands that need to fold flat, adjust height, or disassemble for transport:
+
+| Mechanism | Complexity | Hardware | Best For |
+|-----------|------------|----------|----------|
+| **Snap-on Legs** | Low | None | Flat-pack shipping, swappable heights |
+| **Telescoping (printed teeth)** | Medium | None | Adjustable tilt/height |
+| **Print-in-Place Hinges** | Medium | None | Folding for storage |
+| **Pin Hinges (separate)** | High | Metal pins | Heavy-duty folding |
+
+> ⚠️ **Platform Build Order:** When adding sockets, bosses, or hinges to platforms:
+> 1. Create main platform shape
+> 2. **Fillet platform vertical edges FIRST** (while geometry is simple)
+> 3. Then add lips, sockets, bosses, or hinge mounts
+> 4. Don't attempt to fillet after adding cylindrical/complex attachments (will fail)
+
+#### Snap-On Detachable Legs
+
+Legs that click into sockets on the platform underside.
+
+**Socket Design (platform side):**
+```python
+# Socket parameters
+SOCKET_SIZE = 20       # Inner cavity (square)
+SOCKET_DEPTH = 15      # How deep leg inserts
+SOCKET_WALL = 3        # Wall thickness around socket
+SOCKET_CHAMFER = 5     # Anti-rotation keyed corner
+CLEARANCE = 0.5        # Total clearance (0.25mm per side) - for repeated use
+
+def make_socket():
+    """Square socket with anti-rotation chamfered corner."""
+    outer = SOCKET_SIZE + SOCKET_WALL * 2
+
+    boss = (
+        cq.Workplane("XY")
+        .rect(outer, outer)
+        .extrude(SOCKET_DEPTH)
+    )
+
+    # Cut cavity
+    cavity = (
+        cq.Workplane("XY")
+        .rect(SOCKET_SIZE, SOCKET_SIZE)
+        .extrude(SOCKET_DEPTH)
+    )
+
+    # Anti-rotation chamfer (one corner)
+    chamfer_cut = (
+        cq.Workplane("XY")
+        .moveTo(SOCKET_SIZE/2, SOCKET_SIZE/2)
+        .lineTo(SOCKET_SIZE/2 - SOCKET_CHAMFER, SOCKET_SIZE/2)
+        .lineTo(SOCKET_SIZE/2, SOCKET_SIZE/2 - SOCKET_CHAMFER)
+        .close()
+        .extrude(SOCKET_DEPTH)
+    )
+
+    boss = boss.cut(cavity).cut(chamfer_cut).clean()
+    return boss
+```
+
+**Cantilever Snap-Fit Beam (leg side):**
+```python
+# Beam parameters - MUST calculate stress!
+BEAM_LENGTH = 15       # Longer = more flex, less stress
+BEAM_THICKNESS = 3     # Thicker = stronger but stiffer
+BEAM_WIDTH = 10        # Width of beam
+SNAP_PROTRUSION = 1.0  # How far bump sticks out
+LEAD_IN_ANGLE = 30     # Easy insertion
+RETURN_ANGLE = 60      # Resists pull-out
+
+# Stress calculation (keep under 40 MPa for PLA, 35 MPa for safety)
+# σ = (F × L × t/2) / I  where I = (w × t³) / 12
+# For 3mm thick, 15mm long, 10mm wide beam at 40N force:
+# I = (10 × 3³) / 12 = 22.5 mm⁴
+# σ = (40 × 15 × 1.5) / 22.5 = 40 MPa ✓
+
+def make_snap_beam():
+    """Cantilever beam with snap bump."""
+    beam = cq.Workplane("XY").rect(BEAM_WIDTH, BEAM_THICKNESS).extrude(BEAM_LENGTH)
+
+    # Snap bump profile (asymmetric: 30° entry, 60° retention)
+    entry_run = SNAP_PROTRUSION / math.tan(math.radians(LEAD_IN_ANGLE))
+    return_run = SNAP_PROTRUSION / math.tan(math.radians(RETURN_ANGLE))
+
+    bump = (
+        cq.Workplane("XZ")
+        .moveTo(0, BEAM_LENGTH - entry_run)
+        .lineTo(SNAP_PROTRUSION, BEAM_LENGTH)
+        .lineTo(SNAP_PROTRUSION, BEAM_LENGTH + return_run)
+        .lineTo(0, BEAM_LENGTH + return_run)
+        .close()
+        .extrude(BEAM_WIDTH)
+    )
+
+    return beam.union(bump).clean()
+```
+
+**Key dimensions:**
+| Parameter | Value | Notes |
+|-----------|-------|-------|
+| Socket-leg clearance | 0.5mm total | For repeated insertion |
+| Beam thickness | 3mm | Balance flex vs strength |
+| Beam length | 15mm | Longer = easier insertion |
+| Snap protrusion | 1.0mm | Secure but hand-removable |
+| Lead-in angle | 30° | Smooth insertion |
+| Return angle | 60° | Resists accidental pull-out |
+
+#### Telescoping Legs with Printed Detent Teeth
+
+Nested tubes with interlocking teeth for click-adjustable height. **No hardware needed.**
+
+**Tube dimensions:**
+```python
+OUTER_OD = 18          # Outer tube outer diameter
+OUTER_ID = 13          # Outer tube inner diameter (wall = 2.5mm)
+INNER_OD = 12.4        # Inner tube OD (0.6mm clearance + sanding)
+INNER_ID = 8.4         # Inner tube ID (wall = 2mm)
+
+# Teeth parameters
+TOOTH_HEIGHT = 1.2     # Radial protrusion
+TOOTH_WIDTH = 3.0      # Circumferential width
+TOOTH_SPACING = 5.0    # Vertical spacing (adjustment increments)
+ENTRY_ANGLE = 45       # Easy slide past
+LOCK_ANGLE = 60        # Holds position
+```
+
+**Tooth geometry:**
+```
+TOOTH PROFILE (asymmetric):
+       ╱╲
+      ╱  ╲
+     ╱60° ╲45°
+    ╱______╲
+
+Outer tube: 2 inward-facing teeth (fixed, 180° apart)
+Inner tube: Rows of 4 outward-facing teeth (90° apart, every 5mm)
+```
+
+**Implementation:**
+```python
+def make_detent_tooth(height, entry_angle, lock_angle):
+    """Create asymmetric tooth profile."""
+    entry_run = height / math.tan(math.radians(entry_angle))
+    lock_run = height / math.tan(math.radians(lock_angle))
+
+    return (
+        cq.Workplane("XZ")
+        .moveTo(0, 0)
+        .lineTo(height, lock_run)      # 60° lock slope
+        .lineTo(0, lock_run + entry_run)  # 45° entry slope
+        .close()
+        .extrude(TOOTH_WIDTH)
+    )
+
+def make_inner_tube_with_teeth(height, num_positions=6):
+    """Inner tube with circumferential tooth rows."""
+    tube = (
+        cq.Workplane("XY")
+        .circle(INNER_OD / 2)
+        .circle(INNER_ID / 2)
+        .extrude(height)
+    )
+
+    for row in range(num_positions):
+        z = 5 + row * TOOTH_SPACING
+        for angle in [0, 90, 180, 270]:
+            tooth = make_detent_tooth(TOOTH_HEIGHT, 45, 60)
+            tooth = tooth.rotate((0,0,0), (0,0,1), angle)
+            tooth = tooth.translate((INNER_OD/2, 0, z))
+            tube = tube.union(tooth)
+
+    return tube.clean()
+```
+
+**Print orientation:** Horizontal (tube axis parallel to bed) for strongest layer adhesion. Post-process with 220-grit sanding on inner tube OD.
+
+#### Print-in-Place Hinges
+
+Hinges that print as a single assembly with captive pin - no post-assembly needed.
+
+**Critical clearances (Bambu P1S / modern FDM):**
+```python
+PIN_DIAMETER = 5.0           # Captive pin
+KNUCKLE_ID = 5.6             # 0.3mm clearance per side (0.6mm total)
+KNUCKLE_OD = 10.0            # Outer diameter
+KNUCKLE_LENGTH = 10.0        # Per knuckle segment
+AXIAL_GAP = 0.3              # Between knuckle faces
+```
+
+**3-knuckle design (recommended):**
+```
+Platform    Rail     Platform
+Knuckle   Knuckle   Knuckle
+┌──────┐  ┌──────┐  ┌──────┐
+│ 10mm │  │ 10mm │  │ 10mm │
+│  ○───┼──┼──○───┼──┼───○  │  ← Continuous pin
+└──────┘  └──────┘  └──────┘
+        0.3mm gaps
+
+Total length: 30.6mm (vs 42mm for 5-knuckle)
+Bridge spans: Only 2 (vs 4 for 5-knuckle)
+```
+
+**Detent for deployed position:**
+```python
+DETENT_HEIGHT = 0.5          # Must be ≥0.5mm for reliable click
+DETENT_LEAD_IN = 45          # Degrees - smooth engagement
+DETENT_RETURN = 60           # Degrees - prevents accidental release
+
+def make_hinge_detent():
+    """Asymmetric detent: 45° entry, 60° retention."""
+    lead_run = DETENT_HEIGHT / math.tan(math.radians(45))
+    return_run = DETENT_HEIGHT / math.tan(math.radians(60))
+
+    return (
+        cq.Workplane("XZ")
+        .moveTo(0, 0)
+        .lineTo(lead_run, DETENT_HEIGHT)      # 45° lead-in
+        .lineTo(lead_run + return_run, 0)     # 60° return
+        .close()
+        .extrude(KNUCKLE_LENGTH)
+    )
+```
+
+**Stress relief fillets:** Always add 2mm minimum fillets where hinge knuckles meet the body:
+```python
+# After creating hinge mount
+mount = mount.edges("|Z").fillet(2.0)  # Vertical edges
+mount = mount.edges("<Z").fillet(2.0)  # Bottom transition
+```
+
+**Print settings for hinges:**
+- Layer height: 0.16-0.2mm (finer = better bridge quality)
+- Bridge flow: 95% (slight under-extrusion for cleaner bridges)
+- Bridge speed: 25mm/s
+- Material: PETG recommended (better flexibility than PLA)
+
+#### Tilted Platform Mounting (Critical for All Mechanisms)
+
+When mounting any mechanism to a **tilted platform**, the mounting surface must match the tilt:
+
+```
+WRONG (flat mount on tilted platform - edge contact only):
+                _______________  ← Tilted platform
+               /
+    [Mount]   /    ← Flat-top mount only touches at one edge
+      │      /        NO volume overlap!
+
+CORRECT (tilted mount matches platform):
+                _______________  ← Tilted platform
+               /[Mount]         ← Mount top tilted to match
+              / /                  VOLUME OVERLAP exists
+             / /
+            /|/
+```
+
+**Calculate mount top height at any Y position:**
+```python
+def mount_top_z(y_position, front_z, tilt_angle):
+    """Z height of tilted platform bottom at given Y."""
+    tilt_rise = y_position * math.tan(math.radians(tilt_angle))
+    return front_z + tilt_rise
+```
 
 ### Parametric Box with Lid
 
