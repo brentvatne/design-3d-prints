@@ -24,6 +24,14 @@ Gather requirements and create formal specifications for 3D printable objects be
 
 **Before ANY design work**, use the AskUserQuestion tool to gather requirements. Ask too many questions rather than making assumptions.
 
+> ⚠️ **DO NOT SKIP ROUNDS.** Each round covers essential aspects of the design:
+> - Rounds 1-2: Structure type and device fit
+> - Round 3: Support configuration
+> - **Round 4: Construction (wall thickness AND corner style)** ← Often skipped, causes poor edge finishing
+> - Round 5: Printer constraints
+>
+> Skipping Round 4 leads to models with sharp edges that are uncomfortable to handle.
+
 ### How to Prompt
 
 Use AskUserQuestion with 2-4 focused questions per round. Group related questions together. Continue until all requirements are gathered.

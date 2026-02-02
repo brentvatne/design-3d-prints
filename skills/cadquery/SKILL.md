@@ -9,21 +9,208 @@ Generate reliable, printable CadQuery (Python) code for functional objects optim
 
 > ✅ **PREFERRED** for all 3D printing tasks. CadQuery handles edge fillets, chamfers, workplanes on arbitrary faces, and complex geometry that OpenSCAD cannot.
 
-> 🎨 **DEFAULT EDGE TREATMENTS** - Apply these automatically unless user specifies otherwise:
-> | Location | Treatment | Size | Purpose |
-> |----------|-----------|------|---------|
-> | Vertical edges (`\|Z`) | Fillet | 5-8mm (or = wall thickness) | Comfortable grip, aesthetics |
-> | Bottom edges (`<Z`) | Chamfer | 0.4-0.6mm | Elephant foot prevention |
-> | Top edges (`>Z`) | Chamfer | 0.3-0.5mm | Chip/break prevention |
-> | Interior corners | Fillet | 2-3mm | Stress relief |
-> | Pocket edges | Fillet | 1-2mm | Smooth device insertion |
+> 🎨 **MANDATORY EDGE TREATMENTS** - Never leave sharp **exposed** edges.
 >
-> These make prints look professional and feel good in hand. Skip only if user explicitly wants sharp edges.
+> **EVERY exposed edge must be chamfered or filleted.** Sharp edges are brittle, uncomfortable, and look cheap.
 
-> ⚠️ **MANDATORY:** After writing any design, you MUST:
+## Edge Treatment Process (MUST FOLLOW)
+
+Before writing ANY geometry code, complete this edge planning process:
+
+### Step 1: Enumerate All Parts and Their Exposed Edges
+
+Create a table listing every part and every exposed edge:
+
+```markdown
+| Part | Edge | Position (for NearestToPointSelector) | Treatment |
+|------|------|---------------------------------------|-----------|
+| Legs (4x) | Vertical corners | `edges("\|Z")` before union (simple geometry, bulk OK) | Fillet 4mm |
+| Legs (4x) | Bottom | `edges("<Z")` after all unions (at Z=0) | Chamfer 0.4mm |
+| Platform | Underside front | `(0, -PLATFORM_D/2, FRONT_LEG_H - overlap)` | Fillet 2mm |
+| Platform | Underside back | `(0, PLATFORM_D/2, BACK_LEG_H - overlap)` | Fillet 2mm |
+| Platform | Underside left | `(-PLATFORM_W/2, 0, mid_z)` | Fillet 2mm |
+| Platform | Underside right | `(PLATFORM_W/2, 0, mid_z)` | Fillet 2mm |
+| **Leg-platform transitions** | Ball corners (4x) | Sphere subtraction at `(±leg_x, ±leg_y, LEG_H)` | Blend 4mm |
+| Front lip | Top | `edges(">Z")` before union (simple geometry) | Chamfer 0.8mm |
+| Side lips | Top face | `faces(">(0, -sin, cos)").edges()` before union | Chamfer 0.8mm |
+```
+
+**Key insight:** Use bulk selectors (`edges("|Z")`, `edges("<Z")`) only on simple geometry BEFORE modifications. After any fillet/chamfer, switch to explicit `NearestToPointSelector` for remaining edges.
+
+### Step 2: Target Each Edge Explicitly with NearestToPointSelector
+
+**⚠️ CRITICAL: Bulk selectors FAIL SILENTLY after geometry modifications!**
+
+After filleting one edge, the face/edge topology changes. Subsequent bulk selectors like `faces("...").edges()` or `edges("|X")` may silently select wrong edges or no edges.
+
+**ALWAYS target edges individually by position:**
+
+```python
+# WRONG - bulk selector fails silently after first fillet
+platform = platform.faces(f">{underside_normal}").edges().fillet(2)  # May miss edges!
+
+# RIGHT - target each edge explicitly, verify each one
+underside_edges = [
+    ("front", (0, -PLATFORM_D/2, FRONT_Z)),
+    ("back", (0, PLATFORM_D/2, BACK_Z)),
+    ("left", (-PLATFORM_W/2, 0, MID_Z)),
+    ("right", (PLATFORM_W/2, 0, MID_Z)),
+]
+
+for name, point in underside_edges:
+    try:
+        platform = platform.edges(
+            cq.selectors.NearestToPointSelector(point)
+        ).fillet(2)
+        print(f"  ✓ {name} edge filleted")
+    except Exception as e:
+        print(f"  ✗ {name} edge FAILED: {e}")  # Explicit failure, not silent
+```
+
+**Why bulk selectors fail:**
+1. Filleting edge A changes topology of adjacent faces
+2. Face selector now matches different face, or edges have different geometry
+3. `edges("|X")` may find already-filleted edges (which are now arcs, not lines)
+4. Result: some edges silently skipped
+
+### Step 3: Identify Tilted Geometry
+
+**⚠️ CRITICAL: Coordinate-based selectors (`>Z`, `<Z`) DO NOT WORK on tilted parts!**
+
+For ANY tilted surface:
+1. Calculate the face normal: `(0, -sin(tilt), cos(tilt))` for surfaces tilting back
+2. Use face normal selector: `faces(f">(0, {-sin(tilt):.3f}, {cos(tilt):.3f})")`
+3. Then select edges from that face: `.edges()`
+
+```python
+# WRONG - >Z picks by coordinate, misses tilted top edges entirely
+tilted_lip.faces("<X").edges(">Z").chamfer(0.8)  # FAILS SILENTLY
+
+# RIGHT - select tilted face by its actual normal, then get all edges
+tilt_rad = math.radians(TILT_ANGLE)
+top_normal = f"(0, {-math.sin(tilt_rad):.3f}, {math.cos(tilt_rad):.3f})"
+tilted_lip.faces(f">{top_normal}").edges().chamfer(0.8)  # WORKS
+```
+
+### Step 3: Use Verified Edge Treatment Function
+
+**Always verify chamfers/fillets actually applied by checking volume change:**
+
+```python
+def verified_chamfer(model, selector, size, name):
+    """Apply chamfer and VERIFY it worked."""
+    vol_before = model.val().Volume()
+    try:
+        if isinstance(selector, str):
+            result = model.edges(selector).chamfer(size)
+        else:
+            result = model.edges(selector).chamfer(size)
+        vol_after = result.val().Volume()
+        removed = vol_before - vol_after
+        if removed < 0.1:  # Less than 0.1mm³ = chamfer did nothing
+            raise ValueError(f"Chamfer had no effect - selector matched no edges")
+        print(f"  ✓ {name}: {removed:.1f}mm³ removed")
+        return result
+    except Exception as e:
+        print(f"  ✗ {name}: FAILED - {e}")
+        raise  # Don't silently continue with sharp edges
+
+def verified_fillet(model, selector, radius, name):
+    """Apply fillet and VERIFY it worked."""
+    vol_before = model.val().Volume()
+    try:
+        if isinstance(selector, str):
+            result = model.edges(selector).fillet(radius)
+        else:
+            result = model.edges(selector).fillet(radius)
+        vol_after = result.val().Volume()
+        removed = vol_before - vol_after
+        if removed < 0.1:
+            raise ValueError(f"Fillet had no effect - selector matched no edges")
+        print(f"  ✓ {name}: {removed:.1f}mm³ removed")
+        return result
+    except Exception as e:
+        print(f"  ✗ {name}: FAILED - {e}")
+        raise
+```
+
+### Step 4: Connection vs Exposed Edges
+
+**Only chamfer EXPOSED edges, not connection surfaces!**
+
+| Edge Type | Chamfer? | Why |
+|-----------|----------|-----|
+| Outer face, top edge | ✓ YES | User touches it |
+| Bottom edge (sits on platform) | ✗ NO | Creates gap |
+| Inner face edge (faces pocket) | ✗ NO | Connects to pocket wall |
+| Front/back of lip | ✓ YES | Exposed at corners |
+
+### Step 5: Parts That Overlap Must Actually Overlap
+
+When lips meet at corners, they must overlap to create seamless geometry:
+
+```python
+# WRONG - lips start after each other, leaving gap at corner
+side_lip.moveTo(-PLATFORM_D/2 + WALL, ...)  # Starts AFTER front lip
+
+# RIGHT - lips extend to full edge, overlap handles corner
+side_lip.moveTo(-PLATFORM_D/2, ...)  # Starts at front edge, overlaps front lip
+```
+
+### Step 6: Extruded Shape End Cap Edges
+
+**Every extrusion creates END CAPS that have edges needing treatment.**
+
+When you extrude a profile (e.g., YZ profile extruded in X):
+- Left end cap at `faces("<X")`
+- Right end cap at `faces(">X")`
+- Each end cap has the SAME edges as your profile
+
+**These end cap edges become complex after boolean operations - treat them BEFORE union!**
+
+```python
+# Platform extruded from YZ profile
+platform = (
+    cq.Workplane("YZ")
+    .moveTo(...)  # Define tilted parallelogram
+    .close()
+    .extrude(width / 2, both=True)
+)
+
+# Fillet ALL underside edges (includes left/right end cap bottom edges)
+# Do this BEFORE union with legs!
+tilt_rad = math.radians(TILT_ANGLE)
+underside_normal = f"(0, {-math.sin(tilt_rad):.3f}, {-math.cos(tilt_rad):.3f})"
+platform = platform.faces(f">{underside_normal}").edges().fillet(2)
+
+# NOW union with legs
+stand = stand.union(platform)
+```
+
+**The rule:** For tilted/extruded shapes, select the FACE by its normal, then get ALL its edges. Don't try to select individual edges after complex booleans.
+
+### Standard Edge Treatment Table
+
+| Location | Treatment | Size | Selector (axis-aligned) | Selector (tilted) |
+|----------|-----------|------|-------------------------|-------------------|
+| Vertical edges | Fillet | wall thickness | `edges("\|Z")` | `edges("\|Z")` |
+| Bottom (Z=0) | Chamfer | 0.4mm | `edges("<Z")` | `edges("<Z")` |
+| Top face edges | Chamfer | 0.5-0.8mm | `edges(">Z")` | `faces(">(normal)").edges()` |
+| Underside edges | Fillet | 2mm | `edges("<Z")` | `NearestToPointSelector(point)` |
+| Interior corners | Fillet | 2-3mm | After boolean cuts | After boolean cuts |
+
+> ⚠️ **MANDATORY PROCESS:**
+>
+> **BEFORE writing geometry code:**
+> 1. **Enumerate ALL edges** - Create table listing every part and every exposed edge (see "Edge Treatment Process")
+> 2. **Identify tilted geometry** - Mark which parts have non-axis-aligned faces
+> 3. **Plan selectors** - Write the exact selector for each edge (face normals for tilted parts!)
+>
+> **AFTER writing geometry code:**
 > 1. **Run the code** immediately to verify it executes without errors
 > 2. **Run validation** using `validate_design()` (see "Mandatory Validation" section)
-> 3. **Only export STLs** if all validation checks pass
+> 3. **Verify edge treatments** - Use `verified_chamfer()`/`verified_fillet()` that check volume change
+> 4. **Only export STLs** if all validation checks pass
 >
 > Never hand off STL files to the user without running validation first.
 
@@ -770,6 +957,105 @@ wedge.edges(">(1, 1, 0)")
 ```
 
 > 💡 **Key insight:** String selectors like `">Z"` evaluate edge **direction** (tangent vector), not the face they belong to. For tilted surfaces, select the face first with `.faces()`, then call `.edges()` to get its boundary.
+
+### 5e. Chamfering Tilted Parts (Pre-Union Pattern)
+
+**The Problem:** After unioning tilted parts (like lips on a tilted platform), chamfer operations using `>Z` fail silently because the edges aren't horizontal.
+
+```python
+# THIS FAILS SILENTLY - lips are tilted, >Z doesn't match their top edges
+try:
+    stand = stand.edges(">Z").chamfer(0.5)  # Won't chamfer lip tops!
+except:
+    pass  # Fails silently, no chamfers applied
+```
+
+**Solution: Apply chamfers BEFORE union**
+
+```python
+# Build lip with chamfer applied while it's a simple shape
+front_lip = (
+    cq.Workplane("XY")
+    .workplane(offset=platform_z)
+    .rect(width, wall)
+    .extrude(lip_height)
+    .edges(">Z")           # Works! Simple box has horizontal top
+    .chamfer(0.8)
+)
+stand = stand.union(front_lip)  # Chamfer preserved after union
+```
+
+**Detecting if chamfers were applied:**
+
+Use the `verified_chamfer()` and `verified_fillet()` functions from "Edge Treatment Process" section - they **raise exceptions** instead of silently continuing with sharp edges.
+
+**When to use pre-union chamfers:**
+- Lips on tilted surfaces
+- Any part built with custom profiles (YZ/XZ plane extrusions)
+- Parts that will be complex to select after union
+
+**When post-union chamfers work:**
+- Simple boxes with horizontal tops (`>Z` works)
+- Bottom edges (`<Z` usually works)
+- Vertical edges (`|Z` on legs, posts)
+
+### 5f. Platform/Tray Underside Edges
+
+For open-frame stands with corner posts, the platform underside has exposed edges that need treatment. These tilted edges won't be caught by `<Z` (which only gets edges at minimum Z).
+
+**The geometry:**
+```
+        platform (tilted)
+       ________________
+      /               /|
+     /_______________/ |  ← ALL 4 underside edges need filleting
+    |▓▓▓|       |▓▓▓|  |    (front, back, left diagonal, right diagonal)
+    |▓▓▓|       |▓▓▓|  |  ← legs at corners
+    |▓▓▓|_______|▓▓▓|__|
+```
+
+**Solution: Fillet ALL underside edges BEFORE union using face normal**
+
+```python
+# Build platform
+platform = (
+    cq.Workplane("YZ")
+    .moveTo(-PLATFORM_D/2, FRONT_LEG_H - overlap)
+    .lineTo(PLATFORM_D/2, BACK_LEG_H - overlap)
+    .lineTo(PLATFORM_D/2, BACK_LEG_H + PLATFORM_T)
+    .lineTo(-PLATFORM_D/2, FRONT_LEG_H + PLATFORM_T)
+    .close()
+    .extrude(PLATFORM_W / 2, both=True)
+)
+
+# Fillet ALL underside edges BEFORE union
+# The underside face normal points down and slightly forward
+tilt_rad = math.radians(TILT_ANGLE)
+underside_normal = f"(0, {-math.sin(tilt_rad):.3f}, {-math.cos(tilt_rad):.3f})"
+platform = platform.faces(f">{underside_normal}").edges().fillet(2)
+
+# NOW union with legs
+stand = stand.union(platform)
+```
+
+**Why this works better than post-union selection:**
+- Handles ALL 4 underside edges (front, back, left, right) in one operation
+- Face selection by normal works on simple geometry before union
+- End cap edges (left/right diagonals) get filleted automatically
+- No complex NearestToPointSelector needed
+
+**Key insights:**
+- `edges("<Z")` only catches edges at Z=0 (leg bottoms), not the tilted underside
+- Always fillet extruded shape edges BEFORE boolean operations
+- Select tilted faces by their normal vector, then get all edges
+
+**Complete edge treatment order for platform-on-posts:**
+1. Leg vertical edges: fillet BEFORE union
+2. **Platform underside edges: fillet BEFORE union** (all 4 edges via face normal)
+3. Platform vertical edges: fillet AFTER union (`edges("|Z")`)
+4. Leg bottoms: chamfer with `edges("<Z")`
+5. Lip tops: chamfer BEFORE union (tilted parts, via face normal)
+6. Top edges: chamfer with `edges(">Z")` or `edges("#Z")`
 
 ### 6. Boolean Operations
 
@@ -1755,13 +2041,81 @@ result = result.edges(
 ).fillet(radius)
 ```
 
-3. **Sphere subtraction (fallback):** Less ideal - creates distinct cut rather than continuous surface:
+3. **Sphere subtraction (REQUIRED when parts filleted separately):**
+
+When parts must be filleted before union (e.g., legs filleted individually, then unioned with platform), automatic ball corners don't form. Use sphere cuts to blend the transitions:
+
 ```python
-sphere = cq.Workplane().sphere(radius).translate(corner_point)
-result = result.cut(sphere)
+# Parts filleted separately before union create sharp transition edges
+# Example: legs with filleted corners + platform with filleted corners
+# = sharp horizontal edge where leg meets platform
+
+# Solution: subtract spheres at transition corners
+blend_r = CORNER_R  # Same radius as vertical fillets
+
+# Position spheres at the fillet center points (inset from outer edge)
+leg_outer_x = PLATFORM_W / 2 - CORNER_R
+leg_outer_y = PLATFORM_D / 2 - CORNER_R
+
+for (x, y, z) in [
+    (leg_outer_x, leg_outer_y, BACK_LEG_H),      # Back-right
+    (-leg_outer_x, leg_outer_y, BACK_LEG_H),     # Back-left
+    (leg_outer_x, -leg_outer_y, FRONT_LEG_H),    # Front-right
+    (-leg_outer_x, -leg_outer_y, FRONT_LEG_H),   # Front-left
+]:
+    sphere = cq.Workplane("XY").workplane(offset=z).center(x, y).sphere(blend_r)
+    stand = stand.cut(sphere)
 ```
 
-**Key insight:** For true wrap-around fillets, the fillet operations must be applied in the right order and with matching radii so OCCT can blend them automatically. Sphere cuts create visible transitions rather than continuous surfaces.
+**When sphere cuts are needed:**
+- Parts filleted individually before union (legs, lips)
+- Bulk fillet on combined shape fails (`BRep_API: command not done`)
+- Transition edges can't be selected with NearestToPointSelector
+
+**Key insight:** For true wrap-around fillets, fillet operations must be applied in the right order with matching radii. When that's not possible (complex geometry), sphere cuts create acceptable smooth transitions.
+
+### Verify Fusion During Construction
+
+When building models with multiple unions, verify that parts actually fuse (overlap) rather than just touching. Parts that only touch will appear connected but won't fuse into a single solid.
+
+```python
+def verify_fusion(part_a, part_b, name="parts"):
+    """
+    Verify two parts overlap (union volume < sum of individual volumes).
+    Call this during construction to catch fusion issues early.
+
+    Returns the union if successful, raises AssertionError if parts don't overlap.
+    """
+    vol_a = part_a.val().Volume()
+    vol_b = part_b.val().Volume()
+    result = part_a.union(part_b)
+    vol_union = result.val().Volume()
+
+    # If union volume equals sum, parts don't overlap
+    overlap = (vol_a + vol_b) - vol_union
+    if overlap < 1:  # Less than 1mm³ overlap
+        raise AssertionError(
+            f"{name}: Parts don't overlap! "
+            f"vol_a={vol_a:.0f} + vol_b={vol_b:.0f} = {vol_a+vol_b:.0f}, "
+            f"union={vol_union:.0f}, overlap={overlap:.0f}mm³"
+        )
+
+    return result
+```
+
+**Usage during construction:**
+```python
+# Instead of: stand = legs.union(platform)
+stand = verify_fusion(legs, platform, "legs + platform")
+
+# Instead of: stand = stand.union(front_lip)
+stand = verify_fusion(stand, front_lip, "stand + front_lip")
+```
+
+**When parts should overlap:**
+- Legs supporting a platform: platform bottom should extend INTO leg tops by 2-5mm
+- Lips on a surface: lip bottom should extend INTO the surface
+- Any structural joint: always overlap, never just touch
 
 ### Mandatory Validation (MUST RUN BEFORE EXPORT)
 
@@ -1811,8 +2165,23 @@ def validate_design(models: dict, bed_size=(256, 256, 256), device_dims=None):
             print(f"   {name}: ERROR - {e}")
             all_passed = False
 
-    # 2. Bed fit check
-    print(f"\n2. Bed fit check ({bed_size[0]}x{bed_size[1]}mm):")
+    # 2. Connectivity check (detects disconnected geometry from failed unions)
+    print("\n2. Connectivity check:")
+    for name, model in models.items():
+        try:
+            solids = model.solids().vals()
+            if len(solids) > 1:
+                print(f"   {name}: DISCONNECTED - {len(solids)} separate bodies!")
+                print(f"      Parts may only touch (not overlap). Add overlap for solid fusion.")
+                all_passed = False
+            else:
+                print(f"   {name}: Connected (single body)")
+        except Exception as e:
+            print(f"   {name}: ERROR - {e}")
+            all_passed = False
+
+    # 3. Bed fit check
+    print(f"\n3. Bed fit check ({bed_size[0]}x{bed_size[1]}mm):")
     for name, model in models.items():
         try:
             bb = model.val().BoundingBox()
@@ -1826,14 +2195,14 @@ def validate_design(models: dict, bed_size=(256, 256, 256), device_dims=None):
             print(f"   {name}: ERROR - {e}")
             all_passed = False
 
-    # 3. Device fit (if applicable)
+    # 4. Device fit (if applicable)
     if device_dims:
-        print(f"\n3. Device fit check:")
+        print(f"\n4. Device fit check:")
         print(f"   Device dimensions: {device_dims[0]} x {device_dims[1]} mm")
         # Note: caller should verify pocket dimensions separately
 
-    # 4. Material estimate
-    print("\n4. Material estimate (PLA @ 1.24 g/cm³):")
+    # 5. Material estimate
+    print("\n5. Material estimate (PLA @ 1.24 g/cm³):")
     total_vol, total_mass = 0, 0
     for name, model in models.items():
         try:
@@ -2167,12 +2536,20 @@ External resources:
 
 Before presenting any design as complete, verify ALL of these:
 
-### Edge Treatments
+### Edge Treatments (ZERO SHARP EDGES)
+
+**Principle: Every edge must be chamfered or filleted. Sharp edges are brittle, uncomfortable, and look cheap.**
+
 - [ ] **Vertical edges filleted** - `edges("|Z").fillet(5)` or similar (5-8mm for handheld objects)
 - [ ] **Bottom chamfer applied** - `edges("<Z").chamfer(0.4)` for elephant foot prevention
 - [ ] **Top edges chamfered** - `edges(">Z").chamfer(0.3)` or horizontal edges `edges("#Z").chamfer(0.3)`
 - [ ] **Interior corners filleted** - 2-3mm radius for stress relief
 - [ ] **Pocket/opening edges smoothed** - 1-2mm fillet for comfortable device insertion
+- [ ] **Tilted part edges** - Apply chamfers BEFORE union (tilted edges won't match `>Z` selector after union)
+- [ ] **Platform underside edges** - For open-frame stands, use `NearestToPointSelector` to fillet exposed underside edges
+- [ ] **ALL remaining edges** - Final pass with `edges().chamfer(0.3)` to catch anything missed
+
+**Verify visually:** Load STL in slicer, zoom in on corners and edges - if you see any 90° angles, go back and fix them.
 
 ### Geometry Quality
 - [ ] **`.clean()` after booleans** - Prevents fillet/chamfer failures
