@@ -323,6 +323,42 @@ openscad -o /tmp/preview-under.png --autocenter --camera=0,0,0,105,0,180,450 \
 
 **Use Read tool to view rendered PNGs** and verify visually before delivering to user.
 
+### Cross-Section Diagrams with Excalidraw
+
+When communicating design geometry to the user — cross-sections, clip profiles, assembly views, joint details — **use Excalidraw via MCP instead of ASCII art**. Excalidraw diagrams are clearer, editable, and shareable.
+
+**Workflow:**
+1. Use `mcp__excalidraw__create_view` to draw the diagram inline (streams with animation)
+2. Use `mcp__excalidraw__export_to_excalidraw` to generate a shareable URL
+3. Share the URL so the user can open, edit, and annotate
+
+**When to use Excalidraw:**
+- Cross-section profiles (clip shapes, joint details, wall structures)
+- Assembly diagrams showing how parts fit together
+- Dimension callouts and clearance annotations
+- Exploded views of multi-piece designs
+- Any diagram where you would otherwise use ASCII art
+
+**Drawing conventions for 3D print designs:**
+- Use light orange (`#ffd8a8`, stroke `#f59e0b`) for existing/reference geometry
+- Use light blue (`#a5d8ff`, stroke `#4a9eed`) for the part being designed
+- Use red (`#ef4444`) for dimension annotations
+- Use `bar` arrowheads on both ends for dimension lines
+- Label "OUTSIDE" / "INSIDE" orientation when showing cross-sections
+- Include a legend when using multiple colors
+- Scale small features up (e.g. 1mm = 12-15px) so thin walls are visible
+- Start with a `cameraUpdate` element to frame the view
+- Use camera panning (multiple `cameraUpdate` elements) for progressive reveal
+
+**Example — clip cross-section:**
+```
+Elements: cameraUpdate → title → existing geometry (platform, lip) →
+          clip parts (outer wall, cap, inner wall, hook) →
+          labels with arrows → dimension lines → legend
+```
+
+**Fallback:** If Excalidraw MCP is not available, fall back to ASCII art. But always prefer Excalidraw when the MCP is connected.
+
 ## When to Use This Skill
 
 **Always use CadQuery for:**

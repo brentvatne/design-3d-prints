@@ -328,6 +328,68 @@ def phone_stand(phone_w, phone_d=10, angle=70, wall=4, lip=8):
     return stand
 ```
 
+### Corbel Bracket (Column-to-Platform Support)
+
+A **corbel** is a bracket projecting from a wall or column to support weight above, often with a concave curved profile underneath. Classic architectural element, great for stands where a thin column supports a wide platform.
+
+```
+Side view:
+    ┌─────────────────────────┐  ← platform
+    │▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓│
+    └───────────────╮   ┌─────┘
+                     ╲  │  ← column (thin, same width top to bottom)
+                      ╲ │
+                       ╲│
+                        │
+                        │
+    ════════════════════════  ← desk
+```
+
+The column stays a uniform width. The concave curve sweeps from partway down the column face outward along the platform underside, providing structural support.
+
+```python
+def make_corbel_column(col_w, platform_z, corbel_r, wall, y_pos):
+    """
+    Column with corbel bracket underneath platform.
+
+    Args:
+        col_w: Column width (X dimension)
+        platform_z: Z height of platform bottom
+        corbel_r: Corbel curve radius (larger = more dramatic sweep)
+        wall: Column depth (Y dimension, typically wall thickness)
+        y_pos: Y position to place the column
+    """
+    # Arc from column inner face to platform underside
+    # Center of curvature at (col_w + corbel_r, platform_z - corbel_r)
+    mid_x = (col_w + corbel_r) - corbel_r * 0.707
+    mid_z = (platform_z - corbel_r) + corbel_r * 0.707
+    overlap = 2  # extend into platform for solid fusion
+
+    col = (
+        cq.Workplane("XZ")
+        .moveTo(0, 0)
+        .lineTo(col_w, 0)                          # column base
+        .lineTo(col_w, platform_z - corbel_r)      # up column face
+        .threePointArc((mid_x, mid_z),
+                       (col_w + corbel_r, platform_z))  # concave sweep
+        .lineTo(col_w + corbel_r, platform_z + overlap)  # into platform
+        .lineTo(0, platform_z + overlap)             # across to outer
+        .close()
+        .extrude(wall)
+        .translate((0, y_pos, 0))
+    )
+    return col
+```
+
+**Sizing guidelines:**
+| Platform height | Corbel radius | Visual effect |
+|----------------|---------------|---------------|
+| 40-60mm | 20-30mm | Subtle bracket |
+| 60-80mm | 30-45mm | Balanced (recommended) |
+| 80-120mm | 40-60mm | Dramatic sweep |
+
+**Key rule:** `corbel_r` should be roughly 40-60% of the platform height for good proportions.
+
 ## 3. Brackets and Mounts
 
 ### L-Bracket with Gusset
